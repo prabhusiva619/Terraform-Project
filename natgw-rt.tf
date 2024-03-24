@@ -24,6 +24,10 @@ resource "aws_route_table" "nat_route_table" {
     cidr_block     = "0.0.0.0/0"
     nat_gateway_id = aws_nat_gateway.nat_gateway.id
   }
+
+  tags = {
+   Name = "nat-route-table"
+ }
 }
 
 resource "aws_route_table_association" "nat_rt_association" {

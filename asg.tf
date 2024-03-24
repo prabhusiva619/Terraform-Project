@@ -39,9 +39,8 @@ resource "aws_autoscaling_group" "asg-specs" {
   }
 }
 
-resource "aws_autoscaling_policy" "scale-up" {
-  count                  = 1
-  name                   = "asg-scale-up"
+resource "aws_autoscaling_policy" "scale-out" {
+  name                   = "asg-scale-out"
   scaling_adjustment     = 1
   adjustment_type        = "ChangeInCapacity"
   policy_type            = "SimpleScaling"
@@ -49,9 +48,8 @@ resource "aws_autoscaling_policy" "scale-up" {
   autoscaling_group_name = aws_autoscaling_group.asg-specs.name
 }
 
-resource "aws_autoscaling_policy" "scale-down" {
-  count                  = 1
-  name                   = "asg-scale-down"
+resource "aws_autoscaling_policy" "scale-in" {
+  name                   = "asg-scale-in"
   scaling_adjustment     = -1
   adjustment_type        = "ChangeInCapacity"
   policy_type            = "SimpleScaling"
@@ -60,7 +58,7 @@ resource "aws_autoscaling_policy" "scale-down" {
 }
 
 
-resource "aws_cloudwatch_metric_alarm" "scale-up-alarm" {
+resource "aws_cloudwatch_metric_alarm" "scale-out-alarm" {
   alarm_name                = "CPU Utilization High"
   comparison_operator       = "GreaterThanThreshold"
   evaluation_periods        = var.cpu_utilization_high_evaluation_periods
@@ -74,11 +72,11 @@ resource "aws_cloudwatch_metric_alarm" "scale-up-alarm" {
     "AutoScalingGroupName" = aws_autoscaling_group.asg-specs.name
   }
 
-  alarm_description = "Scale up if CPU utilization is above ${var.cpu_utilization_high_threshold_percent} for ${var.cpu_utilization_high_period_seconds} * ${var.cpu_utilization_high_evaluation_periods} seconds"
-  alarm_actions     = [one(aws_autoscaling_policy.scale-up[*].arn)]
+  alarm_description = "Scale out if CPU utilization is above ${var.cpu_utilization_high_threshold_percent} for ${var.cpu_utilization_high_period_seconds} * ${var.cpu_utilization_high_evaluation_periods} seconds"
+  alarm_actions     = [aws_autoscaling_policy.scale-out.arn]
 }
 
-resource "aws_cloudwatch_metric_alarm" "scale-down-alarm" {
+resource "aws_cloudwatch_metric_alarm" "scale-in-alarm" {
   alarm_name                = "CPU Utilization Low"
   comparison_operator       = "LessThanThreshold"
   evaluation_periods        = var.cpu_utilization_low_evaluation_periods
@@ -92,6 +90,6 @@ resource "aws_cloudwatch_metric_alarm" "scale-down-alarm" {
     "AutoScalingGroupName" = aws_autoscaling_group.asg-specs.name
   }
 
-  alarm_description = "Scale down if the CPU utilization is below ${var.cpu_utilization_low_threshold_percent} for ${var.cpu_utilization_low_period_seconds} * ${var.cpu_utilization_low_evaluation_periods} seconds"
-  alarm_actions     = [one(aws_autoscaling_policy.scale-down[*].arn)]
+  alarm_description = "Scale in if the CPU utilization is below ${var.cpu_utilization_low_threshold_percent} for ${var.cpu_utilization_low_period_seconds} * ${var.cpu_utilization_low_evaluation_periods} seconds"
+  alarm_actions     = [aws_autoscaling_policy.scale-in.arn]
 }
