@@ -2,13 +2,18 @@ resource "aws_launch_template" "asg-launch-template" {
   name_prefix   = "asg-launch-template"
   image_id      = "ami-0c101f26f147fa7fd"
   instance_type = "t2.micro"
-  user_data     = file("userdata.sh")
+  user_data     = filebase64("userdata.sh")
+  
+  iam_instance_profile {
+    name = aws_iam_instance_profile.ec2_s3_profile.name
+  }
 
   network_interfaces {
     associate_public_ip_address = false
     subnet_id                   = aws_subnet.private_subnet.id
     security_groups             = [aws_security_group.ec2-sg.id]
   }
+
   tag_specifications {
     resource_type = "instance"
     tags = {
@@ -32,4 +37,61 @@ resource "aws_autoscaling_group" "asg-specs" {
     id      = aws_launch_template.asg-launch-template.id
     version = "$Latest"
   }
+}
+
+resource "aws_autoscaling_policy" "scale-up" {
+  count                  = 1
+  name                   = "asg-scale-up"
+  scaling_adjustment     = 1
+  adjustment_type        = "ChangeInCapacity"
+  policy_type            = "SimpleScaling"
+  cooldown               = var.asg_cooldown_seconds
+  autoscaling_group_name = aws_autoscaling_group.asg-specs.name
+}
+
+resource "aws_autoscaling_policy" "scale-down" {
+  count                  = 1
+  name                   = "asg-scale-down"
+  scaling_adjustment     = -1
+  adjustment_type        = "ChangeInCapacity"
+  policy_type            = "SimpleScaling"
+  cooldown               = var.asg_cooldown_seconds
+  autoscaling_group_name = aws_autoscaling_group.asg-specs.name
+}
+
+
+resource "aws_cloudwatch_metric_alarm" "scale-up-alarm" {
+  alarm_name                = "CPU Utilization High"
+  comparison_operator       = "GreaterThanThreshold"
+  evaluation_periods        = var.cpu_utilization_high_evaluation_periods
+  metric_name               = "CPUUtilization"
+  namespace                 = "AWS/EC2"
+  period                    = var.cpu_utilization_high_period_seconds
+  statistic                 = "Average"
+  threshold                 = var.cpu_utilization_high_threshold_percent
+  
+  dimensions = {
+    "AutoScalingGroupName" = aws_autoscaling_group.asg-specs.name
+  }
+
+  alarm_description = "Scale up if CPU utilization is above ${var.cpu_utilization_high_threshold_percent} for ${var.cpu_utilization_high_period_seconds} * ${var.cpu_utilization_high_evaluation_periods} seconds"
+  alarm_actions     = [one(aws_autoscaling_policy.scale-up[*].arn)]
+}
+
+resource "aws_cloudwatch_metric_alarm" "scale-down-alarm" {
+  alarm_name                = "CPU Utilization Low"
+  comparison_operator       = "LessThanThreshold"
+  evaluation_periods        = var.cpu_utilization_low_evaluation_periods
+  metric_name               = "CPUUtilization"
+  namespace                 = "AWS/EC2"
+  period                    = var.cpu_utilization_low_period_seconds
+  statistic                 = "Average"
+  threshold                 = var.cpu_utilization_low_threshold_percent
+  
+  dimensions = {
+    "AutoScalingGroupName" = aws_autoscaling_group.asg-specs.name
+  }
+
+  alarm_description = "Scale down if the CPU utilization is below ${var.cpu_utilization_low_threshold_percent} for ${var.cpu_utilization_low_period_seconds} * ${var.cpu_utilization_low_evaluation_periods} seconds"
+  alarm_actions     = [one(aws_autoscaling_policy.scale-down[*].arn)]
 }
